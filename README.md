@@ -36,9 +36,9 @@ tycho-sbom-demo/
 The `tycho-sbom-plugin:generator` goal requires a real p2 installation context
 (an eclipse-repository or product). Running it on a plain `pom`-packaged parent
 fails with *"One of 'installations' or 'installation' must be specified"* because
-there is no built installation to analyse. The `com.example.sbom.repository`
+there is no built installation to analyze. The `com.example.sbom.repository`
 module provides that context: it builds a p2 update-site from the demo bundle,
-then the SBOM generator analyses `target/repository/` in the `verify` phase.
+then the SBOM generator analyzes `target/repository/` in the `verify` phase.
 
 `lib/jzy3d/` is **generated at build time** by `maven-dependency-plugin` and is
 not committed to version control.
@@ -193,7 +193,7 @@ the correct artifact for Tycho 5.x, and `sbom-maven` is not a valid goal.
 ### `One of 'installations' or 'installation' must be specified`
 
 **Cause:** The `generator` goal was run on a `pom`-packaged parent or on an
-`eclipse-plugin` module that has no built p2 installation to analyse.
+`eclipse-plugin` module that has no built p2 installation to analyze.
 
 **Fix:** Run `generator` only in an `eclipse-repository` module, and set the
 `<installation>` parameter to the built repository path:
