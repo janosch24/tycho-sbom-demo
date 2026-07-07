@@ -19,17 +19,21 @@
     <plugins>
 
       <!-- ================================================================
-           Tycho SBOM plugin – generates a CycloneDX SBOM from the built
-           p2 repository (update-site) at target/repository/.
+           Tycho SBOM plugin – generates a CycloneDX SBOM from the
+           *installed* Eclipse product at target/products/…/linux/gtk/x86_64.
 
            Key notes for Tycho 5.0.3:
              • artifactId : tycho-sbom-plugin  (NOT "tycho-sbom")
              • goal       : generator
-             • The goal MUST run on a module with a real p2 installation
-               context – i.e. an eclipse-repository or product module.
-               Running it on a parent "pom" packaging fails with:
-               "One of 'installations' or 'installation' must be specified"
-             • installation points to the built p2 repository directory.
+             • The goal requires a real Eclipse *installation* layout, not a
+               plain p2 update-site.  Specifically it reads
+               "configuration/config.ini" to discover installed bundles.
+               A plain eclipse-repository update-site (target/repository/)
+               has no "configuration/" directory, causing NoSuchFileException.
+             • installation therefore points to the directory produced by
+               tycho-p2-director-plugin:materialize-products, which creates
+               the full installation layout including configuration/config.ini.
+               See com.example.sbom.demo.product for the product definition.
              • process-bundle-classpath enables analysis of Bundle-ClassPath
                embedded JARs – this is the code path that triggers the issue.
            ================================================================ -->
@@ -40,14 +44,19 @@
         <executions>
           <execution>
             <id>generate-sbom</id>
-            <!-- verify runs after package, so target/repository/ exists -->
+            <!-- verify runs after package (where materialize-products ran) -->
             <phase>verify</phase>
             <goals>
               <goal>generator</goal>
             </goals>
             <configuration>
-              <!-- Point to the p2 update-site built by eclipse-repository -->
-              <installation>${project.build.directory}/repository</installation>
+              <!--
+                Point to the installed product, NOT to target/repository/.
+                target/repository/ is a p2 update-site and does NOT contain
+                configuration/config.ini.  The materialized product does.
+                Path convention: target/products/<uid>/<os>/<ws>/<arch>/
+              -->
+              <installation>${project.build.directory}/products/com.example.sbom.demo.product/linux/gtk/x86_64</installation>
               <!-- Analyze Bundle-ClassPath embedded JARs to expose the issue -->
               <process-bundle-classpath>true</process-bundle-classpath>
               <verbose>true</verbose>

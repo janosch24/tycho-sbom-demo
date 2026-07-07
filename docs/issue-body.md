@@ -41,6 +41,10 @@ cd tycho-sbom-demo
 mvn -V -e -DskipTests clean verify
 ```
 
+The `package` phase builds the p2 update-site **and** materializes an Eclipse
+product installation (required by the generator – see *Steps to reproduce*).
+The `verify` phase runs the SBOM generator against the installed product.
+
 Then verify the SBOM gap:
 
 ```bash
@@ -52,21 +56,38 @@ grep -c "jzy3d-jdt-core" com.example.sbom.repository/target/sbom/bom.json \
 
 ## Steps to reproduce
 
+> **Important:** `tycho-sbom-plugin:generator` requires an *installed* Eclipse
+> product layout (with `configuration/config.ini`), not a plain p2 update-site.
+> A plain `eclipse-repository` update-site (`target/repository/`) does **not**
+> contain `configuration/`, so the generator throws `NoSuchFileException`.
+> The steps below use a `.product` file to trigger product materialization via
+> `tycho-p2-director-plugin:materialize-products`.
+
 1. Create an OSGi `eclipse-plugin` bundle.
 2. Embed two JARs under `lib/jzy3d/` and list them on `Bundle-ClassPath` in
    `MANIFEST.MF`:
    - `com.diogonunes:JColor:5.2.0`
    - `org.jzy3d:jzy3d-jdt-core:2.2.0`
 3. Build the bundle and include it in an `eclipse-repository` p2 update-site.
-4. Configure `tycho-sbom-plugin:generator` on the repository module:
+4. Add a minimal `.product` file to the `eclipse-repository` module referencing
+   the bundle and `org.eclipse.osgi`. Tycho will automatically run
+   `materialize-products` during the `package` phase, creating a real Eclipse
+   installation directory under `target/products/<uid>/<os>/<ws>/<arch>/`.
+   That directory contains `configuration/config.ini`.
+5. Configure `tycho-sbom-plugin:generator` on the repository module, pointing
+   `<installation>` at the materialized product (not the update-site):
    ```xml
    <configuration>
-     <installation>${project.build.directory}/repository</installation>
+     <installation>${project.build.directory}/products/com.example.sbom.demo.product/linux/gtk/x86_64</installation>
      <process-bundle-classpath>true</process-bundle-classpath>
    </configuration>
    ```
-5. Run `mvn verify`.
-6. Inspect the generated SBOM at `com.example.sbom.repository/target/sbom/bom.json`.
+6. Run `mvn verify`.
+7. Confirm the installation was created:
+   ```bash
+   ls com.example.sbom.repository/target/products/com.example.sbom.demo.product/linux/gtk/x86_64/configuration/config.ini
+   ```
+8. Inspect the generated SBOM at `com.example.sbom.repository/target/sbom/bom.json`.
 
 ---
 
