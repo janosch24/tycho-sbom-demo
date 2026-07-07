@@ -49,7 +49,7 @@ Then verify the SBOM gap:
 
 ```bash
 grep -c "jzy3d-jdt-core" com.example.sbom.repository/target/com.example.sbom.repository.json \
-  && echo "FOUND" || echo "MISSING — bug confirmed"
+  && echo "FOUND (unresolved entry present)" || echo "MISSING (unexpected)"
 ```
 
 ---
@@ -104,7 +104,20 @@ Both embedded dependencies appear as components containing group, name and versi
 
 ## Actual behaviour
 
-Only `JColor` correctly appears. `jzy3d-jdt-core` is **missing** correct group, name and version from the SBOM, instead the component internal path appears as the component name (`lib/jzy3d/jzy3d-jdt-core-2.2.0.jar`).
+The generated SBOM at `com.example.sbom.repository/target/com.example.sbom.repository.json`
+contains `jzy3d-jdt-core`, but it is not resolved as a Maven component:
+- `group` and `version` are missing
+- `name` uses the internal JAR path instead of the artifactId
+
+Concrete SBOM example:
+
+```json
+{
+  "type": "library",
+  "bom-ref": "plugins/com.example.sbom.demo_1.0.0....jar^lib/jzy3d/jzy3d-jdt-core-2.2.0.jar",
+  "name": "lib/jzy3d/jzy3d-jdt-core-2.2.0.jar"
+}
+```
 
 ---
 
@@ -165,7 +178,7 @@ version=2.2.0
 >
 > This pattern (inheriting `groupId`/`version` from a Maven `<parent>`) is
 > very common in the open-source ecosystem. Any published JAR built this way
-> would be silently omitted from the SBOM.
+> would appear in the SBOM only as an unresolved path-based component.
 
 ---
 
