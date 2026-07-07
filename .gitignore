@@ -29,3 +29,6 @@ target/
 
 # Generated embedded-jar staging folder (populated by maven-dependency-plugin at build time)
 lib/
+
+# IntelliJ
+.idea
