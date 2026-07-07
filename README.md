@@ -119,12 +119,19 @@ Both embedded dependencies appear as components containing group, name and versi
 
 ### Actual behaviour
 
-Only `JColor` appears. `jzy3d-jdt-core` is **missing** from the SBOM.
+The generated SBOM in `com.example.sbom.repository/target/com.example.sbom.repository.json`
+contains `jzy3d-jdt-core`, but not as a correctly resolved Maven component:
+- `group` and `version` are missing
+- `name` uses the internal JAR path instead of the artifactId
 
-```bash
-# Confirm jzy3d-jdt-core is absent (run after mvn verify):
-grep -c "jzy3d-jdt-core" com.example.sbom.repository/target/com.example.sbom.repository.json \
-  && echo "FOUND (unexpected)" || echo "MISSING – bug confirmed"
+Example entry:
+
+```json
+{
+  "type": "library",
+  "bom-ref": "plugins/com.example.sbom.demo_1.0.0....jar^lib/jzy3d/jzy3d-jdt-core-2.2.0.jar",
+  "name": "lib/jzy3d/jzy3d-jdt-core-2.2.0.jar"
+}
 ```
 
 ---
@@ -182,9 +189,9 @@ The key difference visible in `pom.xml`:
 cat com.example.sbom.repository/target/com.example.sbom.repository.json | python3 -m json.tool | \
   grep -A4 '"name"'
 
-# Verify jzy3d-jdt-core is absent
+# Verify jzy3d-jdt-core is present but unresolved
 grep -c "jzy3d-jdt-core" com.example.sbom.repository/target/com.example.sbom.repository.json \
-  && echo "FOUND (unexpected)" || echo "MISSING (bug confirmed)"
+  && echo "FOUND (unresolved entry present)" || echo "MISSING (unexpected)"
 ```
 
 ---
@@ -274,4 +281,3 @@ or earlier.
 
 **Fix:** Ensure outbound HTTPS access to `download.eclipse.org` and Maven Central.
 You can also mirror the Eclipse 2024-06 p2 repository locally.
-
