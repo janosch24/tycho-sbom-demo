@@ -11,6 +11,7 @@
 .mtj.tmp/
 
 # Package Files #
+# NOTE: lib/ is generated at build time by maven-dependency-plugin; keep excluded globally
 *.jar
 *.war
 *.nar
@@ -22,3 +23,9 @@
 # virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
 hs_err_pid*
 replay_pid*
+
+# Maven build output
+target/
+
+# Generated embedded-jar staging folder (populated by maven-dependency-plugin at build time)
+lib/

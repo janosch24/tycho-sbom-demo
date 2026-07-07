@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>com.example</groupId>
+    <artifactId>tycho-sbom-demo-parent</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+  </parent>
+
+  <!-- OSGi bundle ID and version must match MANIFEST.MF exactly -->
+  <artifactId>com.example.sbom.demo</artifactId>
+  <version>1.0.0-SNAPSHOT</version>
+  <packaging>eclipse-plugin</packaging>
+
+  <name>Tycho SBOM Demo Bundle</name>
+
+  <build>
+    <plugins>
+
+      <!-- =================================================================
+           Stage the embedded JARs into lib/jzy3d/ BEFORE Tycho packages
+           the eclipse-plugin.  The generate-resources phase runs well before
+           the package phase, so Tycho finds the JARs when it processes
+           bin.includes from build.properties.
+
+           Why two jars?
+             • JColor 5.2.0           – pom.xml has explicit groupId/version
+                                        → SBOM plugin resolves it correctly
+             • jzy3d-jdt-core 2.2.0   – pom.xml only has artifactId; groupId
+                                        and version are inherited from <parent>
+                                        → SBOM plugin does NOT resolve it
+           ================================================================= -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-dependency-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>copy-embedded-jars</id>
+            <phase>generate-resources</phase>
+            <goals>
+              <goal>copy</goal>
+            </goals>
+            <configuration>
+              <!-- Copy to the project base dir so Tycho's bin.includes picks them up -->
+              <outputDirectory>${project.basedir}/lib/jzy3d</outputDirectory>
+              <artifactItems>
+
+                <!-- ── JColor: pom.xml declares groupId + version explicitly ── -->
+                <artifactItem>
+                  <groupId>com.diogonunes</groupId>
+                  <artifactId>JColor</artifactId>
+                  <version>5.2.0</version>
+                  <type>jar</type>
+                  <destFileName>JColor-5.2.0.jar</destFileName>
+                </artifactItem>
+
+                <!-- ── jzy3d-jdt-core: pom.xml inherits groupId + version
+                         from parent; only pom.properties has the full GAV ── -->
+                <artifactItem>
+                  <groupId>org.jzy3d</groupId>
+                  <artifactId>jzy3d-jdt-core</artifactId>
+                  <version>2.2.0</version>
+                  <type>jar</type>
+                  <destFileName>jzy3d-jdt-core-2.2.0.jar</destFileName>
+                </artifactItem>
+
+              </artifactItems>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
+      <!-- Clean the generated lib/ folder so "mvn clean" is fully repeatable -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-clean-plugin</artifactId>
+        <configuration>
+          <filesets>
+            <fileset>
+              <directory>${project.basedir}/lib</directory>
+            </fileset>
+          </filesets>
+        </configuration>
+      </plugin>
+
+    </plugins>
+  </build>
+
+</project>

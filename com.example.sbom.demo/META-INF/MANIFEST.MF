@@ -1,0 +1,24 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-SymbolicName: com.example.sbom.demo
+Bundle-Version: 1.0.0.qualifier
+Bundle-Name: Tycho SBOM Demo Bundle
+Bundle-Vendor: Example
+
+# No Require-Bundle / Import-Package entries needed – this bundle only
+# demonstrates the SBOM embedding issue with Bundle-ClassPath libs.
+Bundle-RequiredExecutionEnvironment: JavaSE-17
+
+# Two jars are embedded under lib/jzy3d/ and staged by maven-dependency-plugin:
+#
+#  JColor 5.2.0:         pom.xml contains explicit <groupId> and <version>
+#                        → SBOM plugin resolves it successfully.
+#
+#  jzy3d-jdt-core 2.2.0: pom.xml inherits groupId and version from <parent>
+#                        → SBOM plugin FAILS to resolve it (the issue).
+#
+# Both pom.properties files contain the full GAV; the asymmetry is only in
+# how the respective pom.xml declares groupId/version.
+Bundle-ClassPath: .,
+ lib/jzy3d/jzy3d-jdt-core-2.2.0.jar,
+ lib/jzy3d/JColor-5.2.0.jar
