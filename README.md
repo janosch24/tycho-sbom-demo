@@ -2,7 +2,7 @@
 
 Minimal reproducible demo for an Eclipse Tycho SBOM-plugin resolution issue:
 
-> **Some embedded OSGi `Bundle-ClassPath` dependencies are not resolved in SBOM
+> **Some embedded OSGi `Bundle-ClassPath` dependencies are not correctly resolved in SBOM
 > generation when their `pom.xml` inside the JAR inherits `groupId`/`version`
 > from a Maven `<parent>` instead of declaring them explicitly.**
 
@@ -106,11 +106,11 @@ grep osgi.bundles \
 | p2 update-site | `com.example.sbom.repository/target/repository/` |
 | Installed product | `com.example.sbom.repository/target/products/com.example.sbom.demo.product/linux/gtk/x86_64/` |
 | `configuration/config.ini` | `…/linux/gtk/x86_64/configuration/config.ini` *(created by director)* |
-| Generated SBOM | `com.example.sbom.repository/target/sbom/bom.json` *(CycloneDX JSON)* |
+| Generated SBOM | `com.example.sbom.repository/target/com.example.sbom.repository.json` *(CycloneDX JSON)* |
 
 ### Expected behaviour
 
-Both embedded dependencies appear as components in the SBOM:
+Both embedded dependencies appear as components containing group, name and version in the SBOM:
 
 ```json
 { "type": "library", "group": "com.diogonunes",  "name": "JColor",         "version": "5.2.0" }
@@ -123,7 +123,7 @@ Only `JColor` appears. `jzy3d-jdt-core` is **missing** from the SBOM.
 
 ```bash
 # Confirm jzy3d-jdt-core is absent (run after mvn verify):
-grep -c "jzy3d-jdt-core" com.example.sbom.repository/target/sbom/bom.json \
+grep -c "jzy3d-jdt-core" com.example.sbom.repository/target/com.example.sbom.repository.json \
   && echo "FOUND (unexpected)" || echo "MISSING – bug confirmed"
 ```
 
@@ -179,11 +179,11 @@ The key difference visible in `pom.xml`:
 
 ```bash
 # Pretty-print the generated CycloneDX SBOM
-cat com.example.sbom.repository/target/sbom/bom.json | python3 -m json.tool | \
+cat com.example.sbom.repository/target/com.example.sbom.repository.json | python3 -m json.tool | \
   grep -A4 '"name"'
 
 # Verify jzy3d-jdt-core is absent
-grep -c "jzy3d-jdt-core" com.example.sbom.repository/target/sbom/bom.json \
+grep -c "jzy3d-jdt-core" com.example.sbom.repository/target/com.example.sbom.repository.json \
   && echo "FOUND (unexpected)" || echo "MISSING (bug confirmed)"
 ```
 

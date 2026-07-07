@@ -19,6 +19,25 @@
     <plugins>
 
       <!-- ================================================================
+           Tycho P2 director plugin – materializes the Eclipse product at
+           target/products/…/linux/gtk/x86_64.
+           ================================================================ -->
+      <plugin>
+        <groupId>org.eclipse.tycho</groupId>
+        <artifactId>tycho-p2-director-plugin</artifactId>
+        <version>${tycho.version}</version>
+        <executions>
+          <execution>
+            <id>materialize-products</id>
+            <phase>package</phase>
+            <goals>
+              <goal>materialize-products</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+
+      <!-- ================================================================
            Tycho SBOM plugin – generates a CycloneDX SBOM from the
            *installed* Eclipse product at target/products/…/linux/gtk/x86_64.
 

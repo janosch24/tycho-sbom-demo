@@ -1,4 +1,4 @@
-# Bug Report: Tycho SBOM plugin does not resolve embedded Bundle-ClassPath JARs whose pom.xml inherits groupId/version from parent
+# Bug Report: Tycho SBOM plugin does not correctly resolve embedded Bundle-ClassPath JARs whose pom.xml inherits groupId/version from parent
 
 > **Paste this text into a new Eclipse Tycho GitHub issue.**  
 > Repository: https://github.com/eclipse-tycho/tycho
@@ -20,7 +20,7 @@
 ## Summary
 
 The Tycho SBOM plugin (`tycho-sbom-plugin`, goal `generator`, parameter
-`process-bundle-classpath=true`) does **not** emit a component entry for an
+`process-bundle-classpath=true`) does **not** correctly emit a component entry for an
 embedded OSGi `Bundle-ClassPath` JAR when that JAR's internal
 `META-INF/maven/.../pom.xml` inherits `groupId` and/or `version` from a Maven
 `<parent>` element instead of declaring them explicitly.
@@ -48,7 +48,7 @@ The `verify` phase runs the SBOM generator against the installed product.
 Then verify the SBOM gap:
 
 ```bash
-grep -c "jzy3d-jdt-core" com.example.sbom.repository/target/sbom/bom.json \
+grep -c "jzy3d-jdt-core" com.example.sbom.repository/target/com.example.sbom.repository.json \
   && echo "FOUND" || echo "MISSING — bug confirmed"
 ```
 
@@ -87,13 +87,13 @@ grep -c "jzy3d-jdt-core" com.example.sbom.repository/target/sbom/bom.json \
    ```bash
    ls com.example.sbom.repository/target/products/com.example.sbom.demo.product/linux/gtk/x86_64/configuration/config.ini
    ```
-8. Inspect the generated SBOM at `com.example.sbom.repository/target/sbom/bom.json`.
+8. Inspect the generated SBOM at `com.example.sbom.repository/target/com.example.sbom.repository.json`.
 
 ---
 
 ## Expected behaviour
 
-Both embedded dependencies appear as components in the generated CycloneDX SBOM:
+Both embedded dependencies appear as components containing group, name and version in the generated CycloneDX SBOM:
 
 ```json
 { "type": "library", "group": "com.diogonunes",  "name": "JColor",         "version": "5.2.0" }
@@ -104,7 +104,7 @@ Both embedded dependencies appear as components in the generated CycloneDX SBOM:
 
 ## Actual behaviour
 
-Only `JColor` appears. `jzy3d-jdt-core` is **absent** from the SBOM.
+Only `JColor` correctly appears. `jzy3d-jdt-core` is **missing** correct group, name and version from the SBOM, instead the component internal path appears as the component name (`lib/jzy3d/jzy3d-jdt-core-2.2.0.jar`).
 
 ---
 
