@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?pde version="3.5"?>
+<!--
+  Minimal Eclipse product definition used solely to let Tycho's
+  tycho-p2-director-plugin:materialize-products create a real Eclipse
+  installation layout under target/products/com.example.sbom.demo.product/.
+
+  Why this file exists
+  ====================
+  The tycho-sbom-plugin:generator goal expects an *installed* Eclipse product,
+  not a plain p2 update-site.  The critical difference is that an installed
+  product contains "configuration/config.ini", which the generator reads to
+  discover which bundles are present.  A plain p2 update-site produced by
+  eclipse-repository packaging has no "configuration/" directory, so the
+  generator throws a NoSuchFileException.
+
+  How Tycho uses this file
+  ========================
+  When the eclipse-repository lifecycle runs the "package" phase it
+    1. calls tycho-p2-publisher-plugin:publish-products   – publishes the
+       product IU to the module's target/repository p2 site.
+    2. calls tycho-p2-director-plugin:materialize-products – runs the p2
+       director to install the product IUs into
+       target/products/com.example.sbom.demo.product/<os>/<ws>/<arch>/.
+
+  The resulting directory contains:
+    configuration/config.ini      ← the file the SBOM generator requires
+    plugins/com.example.sbom.demo_*.jar  ← bundle with embedded JARs
+
+  Minimal-scope choices
+  =====================
+  * includeLaunchers="false"      – skip eclipse launcher binaries
+  * autoIncludeRequirements="false" – do NOT auto-resolve transitive
+    dependencies; only the explicitly listed plugins are installed.
+  * org.eclipse.osgi              – the Equinox OSGi framework; needed for
+    the director to produce a valid config.ini with osgi.framework set.
+-->
+<product
+    name="Tycho SBOM Demo"
+    uid="com.example.sbom.demo.product"
+    id="com.example.sbom.demo.product"
+    version="1.0.0.qualifier"
+    type="mixed"
+    includeLaunchers="false"
+    autoIncludeRequirements="false">
+
+  <configIni use="default"/>
+
+  <plugins>
+    <!-- The demo bundle with embedded Bundle-ClassPath JARs -->
+    <plugin id="com.example.sbom.demo"/>
+    <!-- Equinox OSGi framework – required so director can write a valid
+         configuration/config.ini (sets osgi.framework and osgi.bundles) -->
+    <plugin id="org.eclipse.osgi"/>
+  </plugins>
+
+</product>

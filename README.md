@@ -26,19 +26,33 @@ tycho-sbom-demo/
 │   ├── build.properties                 # Tycho bin.includes – packs lib/ into bundle
 │   └── META-INF/
 │       └── MANIFEST.MF                  # Bundle-ClassPath with both embedded JARs
-└── com.example.sbom.repository/        # eclipse-repository (p2 update-site)
+└── com.example.sbom.repository/        # eclipse-repository (p2 update-site + product)
     ├── pom.xml                          # tycho-sbom-plugin:generator configured HERE
-    └── category.xml                     # includes com.example.sbom.demo bundle
+    ├── category.xml                     # includes com.example.sbom.demo bundle
+    └── com.example.sbom.demo.product    # minimal product → drives materialize-products
 ```
 
-**Why two modules?**
+**Update site vs. installed product**
 
-The `tycho-sbom-plugin:generator` goal requires a real p2 installation context
-(an eclipse-repository or product). Running it on a plain `pom`-packaged parent
-fails with *"One of 'installations' or 'installation' must be specified"* because
-there is no built installation to analyze. The `com.example.sbom.repository`
-module provides that context: it builds a p2 update-site from the demo bundle,
-then the SBOM generator analyzes `target/repository/` in the `verify` phase.
+Tycho's `eclipse-repository` packaging builds two distinct artefacts:
+
+| Artefact | Path | Layout |
+|---|---|---|
+| p2 update-site | `target/repository/` | `features/`, `plugins/`, `artifacts.jar`, `content.jar` |
+| Installed product | `target/products/com.example.sbom.demo.product/linux/gtk/x86_64/` | `configuration/config.ini`, `plugins/`, … |
+
+The `tycho-sbom-plugin:generator` goal requires an **installed product** layout,
+not the plain update-site. It reads `configuration/config.ini` to discover which
+bundles are present. If you point it at the update-site directory, it throws
+`NoSuchFileException` because `configuration/config.ini` does not exist there.
+
+**Where `configuration/config.ini` comes from**
+
+The `.product` file (`com.example.sbom.demo.product`) tells Tycho to run
+`tycho-p2-director-plugin:materialize-products` during the `package` phase.
+The p2 director installs the listed plugins and writes `configuration/config.ini`
+(with the `osgi.framework` and `osgi.bundles` properties) into the product
+directory. This is the same file created when you install Eclipse normally.
 
 `lib/jzy3d/` is **generated at build time** by `maven-dependency-plugin` and is
 not committed to version control.
@@ -67,12 +81,31 @@ not committed to version control.
 mvn -V -e -DskipTests clean verify
 ```
 
+The `package` phase builds the p2 update-site **and** materializes the Eclipse
+product (creating `configuration/config.ini`). The `verify` phase then runs the
+SBOM generator against the installed product.
+
+### Verify the installation exists and contains `config.ini`
+
+After `mvn verify` completes, confirm the installation was created:
+
+```bash
+# Check config.ini exists in the materialized product
+ls com.example.sbom.repository/target/products/com.example.sbom.demo.product/linux/gtk/x86_64/configuration/config.ini
+
+# Peek at the osgi.bundles entry
+grep osgi.bundles \
+  com.example.sbom.repository/target/products/com.example.sbom.demo.product/linux/gtk/x86_64/configuration/config.ini
+```
+
 ### Output locations
 
 | Artifact | Path |
 |---|---|
 | OSGi bundle JAR | `com.example.sbom.demo/target/com.example.sbom.demo-1.0.0-SNAPSHOT.jar` |
-| p2 repository | `com.example.sbom.repository/target/repository/` |
+| p2 update-site | `com.example.sbom.repository/target/repository/` |
+| Installed product | `com.example.sbom.repository/target/products/com.example.sbom.demo.product/linux/gtk/x86_64/` |
+| `configuration/config.ini` | `…/linux/gtk/x86_64/configuration/config.ini` *(created by director)* |
 | Generated SBOM | `com.example.sbom.repository/target/sbom/bom.json` *(CycloneDX JSON)* |
 
 ### Expected behaviour
@@ -190,19 +223,39 @@ the correct artifact for Tycho 5.x, and `sbom-maven` is not a valid goal.
 
 ---
 
+### `NoSuchFileException: …/configuration/config.ini`
+
+**Cause:** The `installation` parameter in `tycho-sbom-plugin:generator` points
+to the p2 update-site directory (`target/repository/`). That directory is an
+update-site — it contains `features/`, `plugins/`, `artifacts.jar`, and
+`content.jar`, but **no** `configuration/` directory. The generator cannot find
+`configuration/config.ini`, which it requires to discover installed bundles.
+
+**Fix:** Point `<installation>` to a **materialized product directory** produced
+by `tycho-p2-director-plugin:materialize-products`, not to the update-site:
+
+```xml
+<!-- ✗ Wrong – update-site, no configuration/config.ini -->
+<installation>${project.build.directory}/repository</installation>
+
+<!-- ✓ Correct – installed product, includes configuration/config.ini -->
+<installation>${project.build.directory}/products/com.example.sbom.demo.product/linux/gtk/x86_64</installation>
+```
+
+To have the director create the installation, add a `.product` file to the
+`eclipse-repository` module. Tycho's `package` lifecycle then runs
+`tycho-p2-publisher-plugin:publish-products` followed by
+`tycho-p2-director-plugin:materialize-products` automatically.
+
+---
+
 ### `One of 'installations' or 'installation' must be specified`
 
 **Cause:** The `generator` goal was run on a `pom`-packaged parent or on an
 `eclipse-plugin` module that has no built p2 installation to analyze.
 
 **Fix:** Run `generator` only in an `eclipse-repository` module, and set the
-`<installation>` parameter to the built repository path:
-
-```xml
-<configuration>
-  <installation>${project.build.directory}/repository</installation>
-</configuration>
-```
+`<installation>` parameter to the materialized product path (see above).
 
 ---
 
