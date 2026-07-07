@@ -50,6 +50,7 @@
               <installation>${project.build.directory}/repository</installation>
               <!-- Analyze Bundle-ClassPath embedded JARs to expose the issue -->
               <process-bundle-classpath>true</process-bundle-classpath>
+              <verbose>true</verbose>
             </configuration>
           </execution>
         </executions>
