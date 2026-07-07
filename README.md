@@ -9,36 +9,57 @@ Minimal reproducible demo for an Eclipse Tycho SBOM-plugin resolution issue:
 Versions pinned for reproducibility:
 | Component | Version |
 |---|---|
-| Tycho | **5.0.2** |
+| Tycho | **5.0.3** |
 | Eclipse release repo | 2024-06 |
 | `org.jzy3d:jzy3d-jdt-core` | 2.2.0 *(not resolved)* |
 | `com.diogonunes:JColor` | 5.2.0 *(resolved correctly)* |
 
 ---
 
-## Project layout
+## Module architecture
 
 ```
 tycho-sbom-demo/
-├── pom.xml                          # parent – Tycho 5.0.2 + SBOM plugin
-└── com.example.sbom.demo/
-    ├── pom.xml                      # eclipse-plugin module; copies embedded JARs
-    ├── build.properties             # Tycho bin.includes – packs lib/ into bundle
-    └── META-INF/
-        └── MANIFEST.MF              # Bundle-ClassPath with both embedded JARs
+├── pom.xml                              # parent – Tycho 5.0.3 + shared config
+├── com.example.sbom.demo/               # OSGi eclipse-plugin bundle
+│   ├── pom.xml                          # copies embedded JARs via maven-dependency-plugin
+│   ├── build.properties                 # Tycho bin.includes – packs lib/ into bundle
+│   └── META-INF/
+│       └── MANIFEST.MF                  # Bundle-ClassPath with both embedded JARs
+└── com.example.sbom.repository/        # eclipse-repository (p2 update-site)
+    ├── pom.xml                          # tycho-sbom-plugin:generator configured HERE
+    └── category.xml                     # includes com.example.sbom.demo bundle
 ```
+
+**Why two modules?**
+
+The `tycho-sbom-plugin:generator` goal requires a real p2 installation context
+(an eclipse-repository or product). Running it on a plain `pom`-packaged parent
+fails with *"One of 'installations' or 'installation' must be specified"* because
+there is no built installation to analyse. The `com.example.sbom.repository`
+module provides that context: it builds a p2 update-site from the demo bundle,
+then the SBOM generator analyses `target/repository/` in the `verify` phase.
 
 `lib/jzy3d/` is **generated at build time** by `maven-dependency-plugin` and is
 not committed to version control.
 
 ---
 
-## Reproducing the SBOM discrepancy
+## Prerequisites
 
-### Prerequisites
+| Tool | Required version |
+|---|---|
+| Java | **21+** (Tycho 5.0.3 SBOM plugin requires Java 21) |
+| Maven | 3.9+ |
+| Network | access to Maven Central + `download.eclipse.org` |
 
-- Java 17+
-- Maven 3.9+
+> **Note:** Tycho 5.0.3 and its `tycho-sbom-plugin` are compiled for Java 21
+> (class-file version 65). The build will fail with
+> `UnsupportedClassVersionError` on Java 17 or earlier.
+
+---
+
+## Build & reproduce the SBOM discrepancy
 
 ### Run the build
 
@@ -46,17 +67,13 @@ not committed to version control.
 mvn -V -e -DskipTests clean verify
 ```
 
-After a successful build the plugin jar is at:
+### Output locations
 
-```
-com.example.sbom.demo/target/com.example.sbom.demo-1.0.0-SNAPSHOT.jar
-```
-
-The SBOM (CycloneDX JSON) is written to:
-
-```
-com.example.sbom.demo/target/bom.json
-```
+| Artifact | Path |
+|---|---|
+| OSGi bundle JAR | `com.example.sbom.demo/target/com.example.sbom.demo-1.0.0-SNAPSHOT.jar` |
+| p2 repository | `com.example.sbom.repository/target/repository/` |
+| Generated SBOM | `com.example.sbom.repository/target/sbom/bom.json` *(CycloneDX JSON)* |
 
 ### Expected behaviour
 
@@ -71,11 +88,18 @@ Both embedded dependencies appear as components in the SBOM:
 
 Only `JColor` appears. `jzy3d-jdt-core` is **missing** from the SBOM.
 
+```bash
+# Confirm jzy3d-jdt-core is absent (run after mvn verify):
+grep -c "jzy3d-jdt-core" com.example.sbom.repository/target/sbom/bom.json \
+  && echo "FOUND (unexpected)" || echo "MISSING – bug confirmed"
+```
+
 ---
 
 ## Inspecting the embedded JAR metadata
 
 Use these commands to confirm the Maven metadata layout inside each embedded JAR.
+(Run `mvn verify` at least once first so `lib/` is populated.)
 
 ### JColor – works ✅
 
@@ -122,11 +146,11 @@ The key difference visible in `pom.xml`:
 
 ```bash
 # Pretty-print the generated CycloneDX SBOM
-cat com.example.sbom.demo/target/bom.json | python3 -m json.tool | \
+cat com.example.sbom.repository/target/sbom/bom.json | python3 -m json.tool | \
   grep -A4 '"name"'
 
 # Verify jzy3d-jdt-core is absent
-grep -c "jzy3d-jdt-core" com.example.sbom.demo/target/bom.json \
+grep -c "jzy3d-jdt-core" com.example.sbom.repository/target/sbom/bom.json \
   && echo "FOUND (unexpected)" || echo "MISSING (bug confirmed)"
 ```
 
@@ -144,3 +168,57 @@ the complete GAV, is apparently not used as a fallback – or the fallback logic
 has a bug.
 
 See [`docs/issue-body.md`](docs/issue-body.md) for a ready-to-paste Tycho bug report.
+
+---
+
+## Troubleshooting
+
+### `Could not find goal 'sbom-maven' in plugin org.eclipse.tycho:tycho-sbom`
+
+**Cause:** Wrong artifactId and goal name. `tycho-sbom` (without `-plugin`) is not
+the correct artifact for Tycho 5.x, and `sbom-maven` is not a valid goal.
+
+**Fix:** Use `tycho-sbom-plugin` with goal `generator`.
+
+---
+
+### `Could not find goal 'cyclonedx' in plugin org.eclipse.tycho:tycho-sbom`
+
+**Cause:** Same wrong artifactId; `cyclonedx` was never a goal in this plugin.
+
+**Fix:** Use `tycho-sbom-plugin` with goal `generator`.
+
+---
+
+### `One of 'installations' or 'installation' must be specified`
+
+**Cause:** The `generator` goal was run on a `pom`-packaged parent or on an
+`eclipse-plugin` module that has no built p2 installation to analyse.
+
+**Fix:** Run `generator` only in an `eclipse-repository` module, and set the
+`<installation>` parameter to the built repository path:
+
+```xml
+<configuration>
+  <installation>${project.build.directory}/repository</installation>
+</configuration>
+```
+
+---
+
+### `UnsupportedClassVersionError` for `GeneratorMojo` (class file version 65.0)
+
+**Cause:** `tycho-sbom-plugin` 5.0.3 requires Java 21. You are running Java 17
+or earlier.
+
+**Fix:** Switch to Java 21+ (e.g. via `JAVA_HOME` or `jenv`).
+
+---
+
+### Build fails resolving p2 dependencies
+
+**Cause:** Network issues reaching `download.eclipse.org`.
+
+**Fix:** Ensure outbound HTTPS access to `download.eclipse.org` and Maven Central.
+You can also mirror the Eclipse 2024-06 p2 repository locally.
+

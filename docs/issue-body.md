@@ -9,20 +9,21 @@
 
 | Item | Value |
 |---|---|
-| Tycho version | 5.0.2 |
-| `tycho-sbom` version | 5.0.2 |
+| Tycho version | 5.0.3 |
+| `tycho-sbom-plugin` version | 5.0.3 |
 | Maven version | 3.9.x |
-| Java version | 17 |
+| Java version | 21 |
 | OS | Linux x86_64 (also reproduced on Windows) |
 
 ---
 
 ## Summary
 
-The Tycho SBOM plugin (`tycho-sbom`, goal `sbom-maven`) does **not** emit a
-component entry for an embedded OSGi `Bundle-ClassPath` JAR when that JAR's
-internal `META-INF/maven/.../pom.xml` inherits `groupId` and/or `version` from
-a Maven `<parent>` element instead of declaring them explicitly.
+The Tycho SBOM plugin (`tycho-sbom-plugin`, goal `generator`, parameter
+`process-bundle-classpath=true`) does **not** emit a component entry for an
+embedded OSGi `Bundle-ClassPath` JAR when that JAR's internal
+`META-INF/maven/.../pom.xml` inherits `groupId` and/or `version` from a Maven
+`<parent>` element instead of declaring them explicitly.
 
 A JAR with an identical directory structure but an explicit `groupId`/`version`
 in `pom.xml` **is** resolved correctly, demonstrating the resolver parses
@@ -43,7 +44,7 @@ mvn -V -e -DskipTests clean verify
 Then verify the SBOM gap:
 
 ```bash
-grep -c "jzy3d-jdt-core" com.example.sbom.demo/target/bom.json \
+grep -c "jzy3d-jdt-core" com.example.sbom.repository/target/sbom/bom.json \
   && echo "FOUND" || echo "MISSING — bug confirmed"
 ```
 
@@ -56,8 +57,16 @@ grep -c "jzy3d-jdt-core" com.example.sbom.demo/target/bom.json \
    `MANIFEST.MF`:
    - `com.diogonunes:JColor:5.2.0`
    - `org.jzy3d:jzy3d-jdt-core:2.2.0`
-3. Configure `tycho-sbom` in the build and run `mvn verify`.
-4. Inspect `target/bom.json`.
+3. Build the bundle and include it in an `eclipse-repository` p2 update-site.
+4. Configure `tycho-sbom-plugin:generator` on the repository module:
+   ```xml
+   <configuration>
+     <installation>${project.build.directory}/repository</installation>
+     <process-bundle-classpath>true</process-bundle-classpath>
+   </configuration>
+   ```
+5. Run `mvn verify`.
+6. Inspect the generated SBOM at `com.example.sbom.repository/target/sbom/bom.json`.
 
 ---
 
@@ -132,6 +141,10 @@ version=2.2.0
 > direct declarations for `jzy3d-jdt-core`. The SBOM resolver appears to
 > parse `pom.xml` but does not use `pom.properties` as a fallback when
 > `groupId`/`version` are absent from the POM itself.
+>
+> This pattern (inheriting `groupId`/`version` from a Maven `<parent>`) is
+> very common in the open-source ecosystem. Any published JAR built this way
+> would be silently omitted from the SBOM.
 
 ---
 

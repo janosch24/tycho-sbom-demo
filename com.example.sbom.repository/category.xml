@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  category.xml – defines the content of the p2 update-site built by the
+  eclipse-repository packaging lifecycle.
+
+  We include a single bundle (the demo OSGi bundle with embedded JARs on
+  Bundle-ClassPath) so that the SBOM generator has a real installation to
+  analyse.  version="0.0.0" means "any version" – Tycho resolves it to the
+  bundle built from com.example.sbom.demo.
+-->
+<site>
+  <bundle id="com.example.sbom.demo" version="0.0.0">
+    <category name="demo"/>
+  </bundle>
+  <category-def name="demo" label="Tycho SBOM Demo"/>
+</site>

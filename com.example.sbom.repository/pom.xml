@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>com.example</groupId>
+    <artifactId>tycho-sbom-demo-parent</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>com.example.sbom.repository</artifactId>
+  <packaging>eclipse-repository</packaging>
+
+  <name>Tycho SBOM Demo Repository</name>
+
+  <build>
+    <plugins>
+
+      <!-- ================================================================
+           Tycho SBOM plugin – generates a CycloneDX SBOM from the built
+           p2 repository (update-site) at target/repository/.
+
+           Key notes for Tycho 5.0.3:
+             • artifactId : tycho-sbom-plugin  (NOT "tycho-sbom")
+             • goal       : generator
+             • The goal MUST run on a module with a real p2 installation
+               context – i.e. an eclipse-repository or product module.
+               Running it on a parent "pom" packaging fails with:
+               "One of 'installations' or 'installation' must be specified"
+             • installation points to the built p2 repository directory.
+             • process-bundle-classpath enables analysis of Bundle-ClassPath
+               embedded JARs – this is the code path that triggers the issue.
+           ================================================================ -->
+      <plugin>
+        <groupId>org.eclipse.tycho</groupId>
+        <artifactId>tycho-sbom-plugin</artifactId>
+        <version>${tycho.version}</version>
+        <executions>
+          <execution>
+            <id>generate-sbom</id>
+            <!-- verify runs after package, so target/repository/ exists -->
+            <phase>verify</phase>
+            <goals>
+              <goal>generator</goal>
+            </goals>
+            <configuration>
+              <!-- Point to the p2 update-site built by eclipse-repository -->
+              <installation>${project.build.directory}/repository</installation>
+              <!-- Analyze Bundle-ClassPath embedded JARs to expose the issue -->
+              <process-bundle-classpath>true</process-bundle-classpath>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
+    </plugins>
+  </build>
+
+</project>

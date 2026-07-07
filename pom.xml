@@ -17,19 +17,22 @@
   </description>
 
   <modules>
+    <!-- OSGi bundle with two embedded JARs on Bundle-ClassPath -->
     <module>com.example.sbom.demo</module>
+    <!-- eclipse-repository that includes the bundle; SBOM is generated here -->
+    <module>com.example.sbom.repository</module>
   </modules>
 
   <properties>
     <!-- Pinned for reproducibility – the version where the issue was observed -->
-    <tycho.version>5.0.2</tycho.version>
+    <tycho.version>5.0.3</tycho.version>
     <maven.compiler.release>17</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
   </properties>
 
   <!-- ===================================================================
        Tycho requires a p2 repository to resolve OSGi target-platform deps.
-       Eclipse 2024-06 (4.32) is compatible with Tycho 5.0.2.
+       Eclipse 2024-06 (4.32) is compatible with Tycho 5.0.3.
        =================================================================== -->
   <repositories>
     <repository>
@@ -65,27 +68,6 @@
             </environment>
           </environments>
         </configuration>
-      </plugin>
-
-      <!-- ===============================================================
-           Tycho SBOM plugin – generates a CycloneDX SBOM for each module.
-           This is the plugin whose resolver fails to identify components
-           whose embedded pom.xml inherits groupId/version from a parent.
-           =============================================================== -->
-      <plugin>
-        <groupId>org.eclipse.tycho</groupId>
-        <artifactId>tycho-sbom</artifactId>
-        <version>${tycho.version}</version>
-        <executions>
-          <execution>
-            <id>generate-sbom</id>
-            <!-- bind to verify so the SBOM is produced without a deploy -->
-            <phase>verify</phase>
-            <goals>
-              <goal>sbom-maven</goal>
-            </goals>
-          </execution>
-        </executions>
       </plugin>
 
     </plugins>
