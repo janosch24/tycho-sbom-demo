@@ -57,16 +57,21 @@
                embedded JARs – this is the code path that triggers the issue.
            ================================================================ -->
       <plugin>
+        <!--
         <groupId>org.eclipse.tycho</groupId>
         <artifactId>tycho-sbom-plugin</artifactId>
         <version>${tycho.version}</version>
+        -->
+        <groupId>com.manroland</groupId>
+        <artifactId>osgi-helper-maven-plugin</artifactId>
+        <version>2.1.0</version>
         <executions>
           <execution>
             <id>generate-sbom</id>
             <!-- verify runs after package (where materialize-products ran) -->
             <phase>verify</phase>
             <goals>
-              <goal>generator</goal>
+              <goal>generate-sbom</goal>
             </goals>
             <configuration>
               <!--
@@ -78,6 +83,10 @@
               <installation>${project.build.directory}/products/com.example.sbom.demo.product/linux/gtk/x86_64</installation>
               <!-- Analyze Bundle-ClassPath embedded JARs to expose the issue -->
               <process-bundle-classpath>true</process-bundle-classpath>
+              <centralsearch>true</centralsearch>
+              <content-redirections>
+                <content-redirection>https://repo.maven.apache.org/maven2/org/jzy3d/->https://maven.jzy3d.org/releases/org/jzy3d/</content-redirection>
+              </content-redirections>
               <verbose>true</verbose>
             </configuration>
           </execution>
