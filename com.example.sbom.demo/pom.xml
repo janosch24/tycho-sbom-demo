@@ -12,7 +12,6 @@
 
   <!-- OSGi bundle ID and version must match MANIFEST.MF exactly -->
   <artifactId>com.example.sbom.demo</artifactId>
-  <version>1.0.0-SNAPSHOT</version>
   <packaging>eclipse-plugin</packaging>
 
   <name>Tycho SBOM Demo Bundle</name>
@@ -21,17 +20,20 @@
     <plugins>
 
       <!-- =================================================================
-           Stage the embedded JARs into lib/jzy3d/ BEFORE Tycho packages
-           the eclipse-plugin.  The generate-resources phase runs well before
+           Stage the embedded JARs into lib/ BEFORE Tycho packages
+           the eclipse-plugin. The generate-resources phase runs well before
            the package phase, so Tycho finds the JARs when it processes
            bin.includes from build.properties.
 
-           Why two jars?
-             • JColor 5.2.0           – pom.xml has explicit groupId/version
-                                        → SBOM plugin resolves it correctly
-             • jzy3d-jdt-core 2.2.0   – pom.xml only has artifactId; groupId
-                                        and version are inherited from <parent>
-                                        → SBOM plugin does NOT resolve it
+           Why three jars?
+             • JColor 5.2.0               – pom.xml has explicit groupId/version
+                                            → SBOM plugin resolves it correctly
+             • jzy3d-jdt-core 2.2.0       – pom.xml only has artifactId; groupId
+                                            and version are inherited from <parent>
+                                            → SBOM plugin does NOT resolve it
+             • hivemq-mqtt-client-1.3.16  – contains neither pom.xml nor pom.properties,
+                                            → SBOM plugin resolves it only if
+                                              <centralsearch>true</centralsearch>
            ================================================================= -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
@@ -45,10 +47,11 @@
             </goals>
             <configuration>
               <!-- Copy to the project base dir so Tycho's bin.includes picks them up -->
-              <outputDirectory>${project.basedir}/lib/jzy3d</outputDirectory>
+              <outputDirectory>${project.basedir}/lib</outputDirectory>
               <artifactItems>
 
-                <!-- ── JColor: pom.xml declares groupId + version explicitly ── -->
+                <!-- ── JColor: pom.xml declares groupId + version explicitly,
+                        available at maven-central ── -->
                 <artifactItem>
                   <groupId>com.diogonunes</groupId>
                   <artifactId>JColor</artifactId>
@@ -58,7 +61,8 @@
                 </artifactItem>
 
                 <!-- ── jzy3d-jdt-core: pom.xml inherits groupId + version
-                         from parent; only pom.properties has the full GAV ── -->
+                        from parent; only pom.properties has the full GAV,
+                        only available at https://maven.jzy3d.org/releases  ── -->
                 <artifactItem>
                   <groupId>org.jzy3d</groupId>
                   <artifactId>jzy3d-jdt-core</artifactId>
@@ -67,6 +71,26 @@
                   <destFileName>jzy3d-jdt-core-2.2.0.jar</destFileName>
                 </artifactItem>
 
+                <!-- ── HiveMQ MQTT client contains no GAV at all as build with gradle,
+                        available at maven-central ── -->
+                <artifactItem>
+                  <groupId>com.hivemq</groupId>
+                  <artifactId>hivemq-mqtt-client</artifactId>
+                  <version>1.3.16</version>
+                  <type>jar</type>
+                  <destFileName>hivemq-mqtt-client-1.3.16.jar</destFileName>
+                </artifactItem>
+
+                <!-- ── PressQuality common contains no GAV and
+                        is not available at central (own hosted lib) ──
+                <artifactItem>
+                  <groupId>com.manroland.clsw</groupId>
+                  <artifactId>pressqualitycommon</artifactId>
+                  <version>3.19.0</version>
+                  <type>jar</type>
+                  <destFileName>pressqualitycommon-3.19.0.jar</destFileName>
+                </artifactItem>
+                -->
               </artifactItems>
             </configuration>
           </execution>
