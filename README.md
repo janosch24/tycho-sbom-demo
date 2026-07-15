@@ -1,18 +1,30 @@
 # tycho-sbom-demo
 
-Minimal reproducible demo for an Eclipse Tycho SBOM-plugin resolution issue:
+Minimal reproducible demo for a Tycho SBOM-plugin resolution issue:
 
-> **Some embedded OSGi `Bundle-ClassPath` dependencies are not correctly resolved in SBOM
-> generation when their `pom.xml` inside the JAR inherits `groupId`/`version`
-> from a Maven `<parent>` instead of declaring them explicitly.**
+> **Embedded OSGi `Bundle-ClassPath` dependencies only ever get a full Maven
+> identity (group/artifactId/version + `pkg:maven` purl) in the generated SBOM
+> if the exact same artifact can also be downloaded byte-identically from
+> `https://repo.maven.apache.org/maven2/`. Correctly embedded Maven metadata
+> (`pom.xml`/`pom.properties`) alone is not enough — the resolver discards it
+> again if this final, hardcoded Central-only verification fails.**
+
+This started out as a narrower report about `<parent>`-inherited `groupId`/
+`version` in an embedded `pom.xml` (see git history / the original issue text
+below). Systematic testing with three differently-sourced libraries showed
+that hypothesis was incomplete — see [Root cause](#root-cause) below for the
+corrected explanation, and [`docs/issue-body.md`](docs/issue-body.md) for the
+full, up-to-date write-up.
 
 Versions pinned for reproducibility:
-| Component | Version |
-|---|---|
-| Tycho | **5.0.3** |
-| Eclipse release repo | 2024-06 |
-| `org.jzy3d:jzy3d-jdt-core` | 2.2.0 *(not resolved)* |
-| `com.diogonunes:JColor` | 5.2.0 *(resolved correctly)* |
+
+| Component | Version | Hosted on | Embeds `pom.xml`/`pom.properties`? |
+|---|---|---|---|
+| Tycho | **5.0.3** | – | – |
+| Eclipse release repo | 2024-06 | – | – |
+| `com.diogonunes:JColor` | 5.2.0 | Maven Central | both, explicit GAV |
+| `org.jzy3d:jzy3d-jdt-core` | 2.2.0 | `maven.jzy3d.org` (**not** Central) | both, GAV via `<parent>` |
+| `com.hivemq:hivemq-mqtt-client` | 1.3.16 | Maven Central | neither (Gradle build) |
 
 ---
 
@@ -25,7 +37,7 @@ tycho-sbom-demo/
 │   ├── pom.xml                          # copies embedded JARs via maven-dependency-plugin
 │   ├── build.properties                 # Tycho bin.includes – packs lib/ into bundle
 │   └── META-INF/
-│       └── MANIFEST.MF                  # Bundle-ClassPath with both embedded JARs
+│       └── MANIFEST.MF                  # Bundle-ClassPath with all embedded JARs
 └── com.example.sbom.repository/        # eclipse-repository (p2 update-site + product)
     ├── pom.xml                          # tycho-sbom-plugin:generator configured HERE
     ├── category.xml                     # includes com.example.sbom.demo bundle
@@ -54,8 +66,8 @@ The p2 director installs the listed plugins and writes `configuration/config.ini
 (with the `osgi.framework` and `osgi.bundles` properties) into the product
 directory. This is the same file created when you install Eclipse normally.
 
-`lib/jzy3d/` is **generated at build time** by `maven-dependency-plugin` and is
-not committed to version control.
+`com.example.sbom.demo/lib/` is **generated at build time** by
+`maven-dependency-plugin` and is not committed to version control.
 
 ---
 
@@ -65,7 +77,7 @@ not committed to version control.
 |---|---|
 | Java | **21+** (Tycho 5.0.3 SBOM plugin requires Java 21) |
 | Maven | 3.9+ |
-| Network | access to Maven Central + `download.eclipse.org` |
+| Network | access to Maven Central, `download.eclipse.org`, and `maven.jzy3d.org` |
 
 > **Note:** Tycho 5.0.3 and its `tycho-sbom-plugin` are compiled for Java 21
 > (class-file version 65). The build will fail with
@@ -85,15 +97,16 @@ The `package` phase builds the p2 update-site **and** materializes the Eclipse
 product (creating `configuration/config.ini`). The `verify` phase then runs the
 SBOM generator against the installed product.
 
+Optionally add `-Dcentral-search=true` (maps to `<centralsearch>true</centralsearch>`)
+to also enable filename-/hash-based lookup against Maven Central — see
+[What `centralsearch` actually changes](#what-centralsearch-actually-changes) below.
+
 ### Verify the installation exists and contains `config.ini`
 
 After `mvn verify` completes, confirm the installation was created:
 
 ```bash
-# Check config.ini exists in the materialized product
 ls com.example.sbom.repository/target/products/com.example.sbom.demo.product/linux/gtk/x86_64/configuration/config.ini
-
-# Peek at the osgi.bundles entry
 grep osgi.bundles \
   com.example.sbom.repository/target/products/com.example.sbom.demo.product/linux/gtk/x86_64/configuration/config.ini
 ```
@@ -105,32 +118,34 @@ grep osgi.bundles \
 | OSGi bundle JAR | `com.example.sbom.demo/target/com.example.sbom.demo-1.0.0-SNAPSHOT.jar` |
 | p2 update-site | `com.example.sbom.repository/target/repository/` |
 | Installed product | `com.example.sbom.repository/target/products/com.example.sbom.demo.product/linux/gtk/x86_64/` |
-| `configuration/config.ini` | `…/linux/gtk/x86_64/configuration/config.ini` *(created by director)* |
 | Generated SBOM | `com.example.sbom.repository/target/com.example.sbom.repository.json` *(CycloneDX JSON)* |
 
 ### Expected behaviour
 
-Both embedded dependencies appear as components containing group, name and version in the SBOM:
+All three embedded dependencies appear as components containing group, name,
+version and a `pkg:maven` purl:
 
 ```json
-{ "type": "library", "group": "com.diogonunes",  "name": "JColor",         "version": "5.2.0" }
-{ "type": "library", "group": "org.jzy3d",        "name": "jzy3d-jdt-core", "version": "2.2.0" }
+{ "type": "library", "group": "com.diogonunes", "name": "JColor",             "version": "5.2.0",  "purl": "pkg:maven/com.diogonunes/JColor@5.2.0" }
+{ "type": "library", "group": "org.jzy3d",       "name": "jzy3d-jdt-core",     "version": "2.2.0",  "purl": "pkg:maven/org.jzy3d/jzy3d-jdt-core@2.2.0" }
+{ "type": "library", "group": "com.hivemq",       "name": "hivemq-mqtt-client", "version": "1.3.16", "purl": "pkg:maven/com.hivemq/hivemq-mqtt-client@1.3.16" }
 ```
 
-### Actual behaviour
+### Actual behaviour (default configuration, `centralsearch` unset)
 
-The generated SBOM in `com.example.sbom.repository/target/com.example.sbom.repository.json`
-contains `jzy3d-jdt-core`, but not as a correctly resolved Maven component:
-- `group` and `version` are missing
-- `name` uses the internal JAR path instead of the artifactId
+| Library | Resolved? |
+|---|---|
+| JColor | ✅ yes |
+| jzy3d-jdt-core | ❌ no — `name` is the raw jar path, no group/version/purl |
+| hivemq-mqtt-client | ❌ no — `version` is present (parsed from the filename) but no group/purl |
 
-Example entry:
+Example of an unresolved entry:
 
 ```json
 {
   "type": "library",
-  "bom-ref": "plugins/com.example.sbom.demo_1.0.0....jar^lib/jzy3d/jzy3d-jdt-core-2.2.0.jar",
-  "name": "lib/jzy3d/jzy3d-jdt-core-2.2.0.jar"
+  "bom-ref": "plugins/com.example.sbom.demo_....jar^lib/jzy3d-jdt-core-2.2.0.jar",
+  "name": "lib/jzy3d-jdt-core-2.2.0.jar"
 }
 ```
 
@@ -138,76 +153,117 @@ Example entry:
 
 ## Inspecting the embedded JAR metadata
 
-Use these commands to confirm the Maven metadata layout inside each embedded JAR.
-(Run `mvn verify` at least once first so `lib/` is populated.)
+Run `mvn verify` at least once first so `com.example.sbom.demo/lib/` is populated.
 
-### JColor – works ✅
-
-```bash
-# List META-INF/maven entries
-jar tf com.example.sbom.demo/lib/jzy3d/JColor-5.2.0.jar \
-  | grep META-INF/maven
-
-# Show pom.properties (contains explicit groupId, artifactId, version)
-unzip -p com.example.sbom.demo/lib/jzy3d/JColor-5.2.0.jar \
-  META-INF/maven/com.diogonunes/JColor/pom.properties
-
-# Show pom.xml (contains explicit <groupId> and <version>)
-unzip -p com.example.sbom.demo/lib/jzy3d/JColor-5.2.0.jar \
-  META-INF/maven/com.diogonunes/JColor/pom.xml
-```
-
-### jzy3d-jdt-core – not resolved ❌
+### JColor — resolved ✅
 
 ```bash
-# List META-INF/maven entries
-jar tf com.example.sbom.demo/lib/jzy3d/jzy3d-jdt-core-2.2.0.jar \
-  | grep META-INF/maven
-
-# Show pom.properties (contains full GAV – looks complete)
-unzip -p com.example.sbom.demo/lib/jzy3d/jzy3d-jdt-core-2.2.0.jar \
-  META-INF/maven/org.jzy3d/jzy3d-jdt-core/pom.properties
-
-# Show pom.xml (NOTE: no <groupId> or <version> – both inherited from <parent>)
-unzip -p com.example.sbom.demo/lib/jzy3d/jzy3d-jdt-core-2.2.0.jar \
-  META-INF/maven/org.jzy3d/jzy3d-jdt-core/pom.xml
+jar tf com.example.sbom.demo/lib/JColor-5.2.0.jar | grep META-INF/maven
+unzip -p com.example.sbom.demo/lib/JColor-5.2.0.jar META-INF/maven/com.diogonunes/JColor/pom.properties
+unzip -p com.example.sbom.demo/lib/JColor-5.2.0.jar META-INF/maven/com.diogonunes/JColor/pom.xml
 ```
 
-The key difference visible in `pom.xml`:
+`pom.xml` declares `<groupId>`/`<version>` explicitly. Central hosts this
+artifact, so the final verification step succeeds.
 
-| | `JColor` | `jzy3d-jdt-core` |
-|---|---|---|
-| `<groupId>` in pom.xml | ✅ explicit | ❌ inherited from `<parent>` |
-| `<version>` in pom.xml | ✅ explicit | ❌ inherited from `<parent>` |
-| `groupId` in pom.properties | ✅ present | ✅ present |
-| `version` in pom.properties | ✅ present | ✅ present |
-
-### Check the generated SBOM
+### jzy3d-jdt-core — not resolved ❌
 
 ```bash
-# Pretty-print the generated CycloneDX SBOM
-cat com.example.sbom.repository/target/com.example.sbom.repository.json | python3 -m json.tool | \
-  grep -A4 '"name"'
-
-# Verify jzy3d-jdt-core is present but unresolved
-grep -c "jzy3d-jdt-core" com.example.sbom.repository/target/com.example.sbom.repository.json \
-  && echo "FOUND (unresolved entry present)" || echo "MISSING (unexpected)"
+jar tf com.example.sbom.demo/lib/jzy3d-jdt-core-2.2.0.jar | grep META-INF/maven
+unzip -p com.example.sbom.demo/lib/jzy3d-jdt-core-2.2.0.jar META-INF/maven/org.jzy3d/jzy3d-jdt-core/pom.properties
+unzip -p com.example.sbom.demo/lib/jzy3d-jdt-core-2.2.0.jar META-INF/maven/org.jzy3d/jzy3d-jdt-core/pom.xml
 ```
+
+`pom.xml` inherits `groupId`/`version` from a `<parent>` element — but
+`pom.properties` (which the resolver actually reads for embedded jars, **not**
+`pom.xml`, see [Root cause](#root-cause)) already contains the full GAV. The
+real reason this stays unresolved is that this artifact is published on
+`maven.jzy3d.org`, not on Maven Central.
+
+### hivemq-mqtt-client — not (fully) resolved ❌
+
+```bash
+jar tf com.example.sbom.demo/lib/hivemq-mqtt-client-1.3.16.jar | grep META-INF/maven
+```
+
+This prints nothing — the jar contains **no** `META-INF/maven` directory at
+all, because it was built and published with Gradle. Gradle's `maven-publish`
+plugin does not embed `pom.xml`/`pom.properties` into the jar; that is purely
+a convention of Maven's own archiver. Without `centralsearch=true`, the
+resolver therefore has no candidate GAV to try at all for this artifact.
 
 ---
 
-## Root cause hypothesis
+## Root cause
 
-The Tycho SBOM plugin attempts to identify embedded JAR components by parsing
-the `pom.xml` found under `META-INF/maven/<groupId>/<artifactId>/pom.xml` inside
-the JAR. When `groupId` and/or `version` are not declared directly in that POM
-but are only available via a `<parent>` element, the resolver cannot perform
-parent-POM resolution (since the parent is not on the classpath) and therefore
-cannot determine the full GAV. The `pom.properties` file, which **does** contain
-the complete GAV, is apparently not used as a fallback – or the fallback logic
-has a bug.
+The originally suspected cause — that the resolver reads `pom.xml` but not
+`pom.properties`, so `<parent>`-inherited `groupId`/`version` breaks resolution
+— **does not match the actual code**. In
+[`MavenDescriptor.java`](https://github.com/eclipse-cbi/p2repo-sbom/blob/main/plugins/org.eclipse.cbi.p2repo.sbom/src/org/eclipse/cbi/p2repo/sbom/MavenDescriptor.java),
+`createFromBytes(...)` — the method used to resolve embedded Bundle-ClassPath
+jars — reads **only** `META-INF/maven/.../pom.properties`; it never parses the
+embedded `pom.xml` at all. Since `pom.properties` always contains the fully
+resolved GAV regardless of `<parent>` inheritance, this step succeeds for both
+JColor and jzy3d-jdt-core.
 
-See [`docs/issue-body.md`](docs/issue-body.md) for a ready-to-paste Tycho bug report.
+The actual point of failure is later, in `SBOMGenerator.setMavenPurl(...)`:
+
+```java
+var mavenArtifactBytes = contentHandler.getBinaryContent(mavenDescriptor.toArtifactURI());
+...
+if (equivalent(bytes, mavenArtifactBytes, differences)) {
+    component.setPurl(mavenDescriptor.mavenPURL());
+    return true;
+}
+```
+
+`toArtifactURI()` is built from a hardcoded constant in `MavenDescriptor.java`:
+
+```java
+public static final String MAVEN_CENTRAL_URI = "https://repo.maven.apache.org/maven2/";
+```
+
+A correctly identified GAV (from `pom.properties`, from filename search, or
+from hash search) is only kept — group/artifactId/version + `pkg:maven` purl
+set — if the *exact same bytes* can also be downloaded from that fixed
+Central URL. If that download 404s (because the artifact is hosted anywhere
+else), the candidate is silently discarded and the component falls back to a
+bare, path-named entry. This is why JColor (on Central) resolves, while
+jzy3d-jdt-core (on `maven.jzy3d.org`) does not, even though both are correctly
+identified from `pom.properties` in exactly the same way.
+
+### What `centralsearch` actually changes
+
+`centralsearch` (`-central-search`) only affects **how a candidate GAV is
+found**, not the verification step above:
+
+- `MavenDescriptor.createFromJarName(...)` — tried first for embedded jars,
+  parses the jar's **filename** and queries `search.maven.org` by
+  artifactId/version. Only runs when `centralsearch=true`; this is what gives
+  `hivemq-mqtt-client` (no embedded metadata at all) a candidate GAV.
+- The hash-based fallback inside `createFromBytes(...)` (queries
+  `central.sonatype.com` by SHA-1) — same restriction.
+
+Neither path changes `setMavenPurl`'s hardcoded Central-only verification.
+That is why `jzy3d-jdt-core` stays unresolved with `centralsearch=true` as well
+— it never had a metadata problem, it has a hosting-location problem.
+
+---
+
+## Proposed fix
+
+`p2repo-sbom` already ships a redirection mechanism for exactly this class of
+problem: `URIUtil.URIMap` / `parseRedirections(...)`, wired into
+`ContentHandler.getBinaryContent(...)` (which `setMavenPurl` calls), activated
+via the generator's own `-content-redirections "source->target"` CLI flag
+(prefix-based, both sides must end in `/`).
+
+`tycho-sbom-plugin`'s `GeneratorMojo` does not currently expose this flag. A
+small, additive change fixes that — see
+[`docs/issue-body.md`](docs/issue-body.md) for the concrete patch and a
+validated example configuration that resolves both `jzy3d-jdt-core` (redirected
+to `maven.jzy3d.org`) and an internal, non-public artifact (redirected to a
+private Artifactory instance) without any change to `p2repo-sbom` itself.
 
 ---
 
@@ -272,6 +328,21 @@ To have the director create the installation, add a `.product` file to the
 or earlier.
 
 **Fix:** Switch to Java 21+ (e.g. via `JAVA_HOME` or `jenv`).
+
+---
+
+### An artifact stays unresolved even though `pom.properties` is complete and correct
+
+**Cause:** This is the actual bug described above — the artifact is not hosted
+on `https://repo.maven.apache.org/maven2/`, so `setMavenPurl`'s mandatory
+verification download fails and the correctly identified GAV is discarded.
+`centralsearch` does not help here, since it only affects candidate discovery,
+not verification.
+
+**Fix / workaround:** Configure `-content-redirections` (once your
+`tycho-sbom-plugin` version supports it, see [Proposed fix](#proposed-fix)) to
+point the verification lookup at the repository the artifact is actually
+hosted on.
 
 ---
 
