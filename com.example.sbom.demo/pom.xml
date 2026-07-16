@@ -34,6 +34,9 @@
              • hivemq-mqtt-client-1.3.16  – contains neither pom.xml nor pom.properties,
                                             → SBOM plugin resolves it only if
                                               <centralsearch>true</centralsearch>
+             • failureaccess-1.0.0        – contains pom.xml and pom.properties,
+                                            → SBOM plugin does not resolve it as it is
+                                              packaging=bundle
            ================================================================= -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
@@ -81,16 +84,16 @@
                   <destFileName>hivemq-mqtt-client-1.3.16.jar</destFileName>
                 </artifactItem>
 
-                <!-- ── PressQuality common contains no GAV and
-                        is not available at central (own hosted lib) ──
+                <!-- ── failureaccess contains GAV,
+                        available at maven-central but packaging is bundle (not jar) ── -->
                 <artifactItem>
-                  <groupId>com.manroland.clsw</groupId>
-                  <artifactId>pressqualitycommon</artifactId>
-                  <version>3.19.0</version>
+                  <groupId>com.google.guava</groupId>
+                  <artifactId>failureaccess</artifactId>
+                  <version>1.0.1</version>
                   <type>jar</type>
-                  <destFileName>pressqualitycommon-3.19.0.jar</destFileName>
+                  <destFileName>failureaccess-1.0.1.jar</destFileName>
                 </artifactItem>
-                -->
+
               </artifactItems>
             </configuration>
           </execution>
